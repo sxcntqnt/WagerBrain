@@ -1,113 +1,178 @@
 from fractions import Fraction
 from math import gcd
 import numpy as np
+from typing import Union
 
 
-"""
-Convert the style of gambling odds to Function Name (Decimal, American, Fractional).
-
-TO DO: Fix edge case related to Fraction module that causes weird rounding / slightly off output    
-"""
-
-
-def american_odds(odds):
+class OddsConverter:
     """
-    :param odds: Float (e.g., 2.25) or String (e.g., '3/1' or '5/4').
-    :return: Integer. Odds expressed in American terms.
+    Provides utilities to convert between different gambling odds formats:
+    American, Decimal, Fractional, and Parlay calculations.
+
+    Methods:
+        american_odds(odds) -> int:
+            Converts odds to American format.
+        decimal_odds(odds) -> float:
+            Converts odds to Decimal format.
+        fractional_odds(odds) -> Fraction:
+            Converts odds to Fractional format.
+        parlay_odds(odds_list) -> float:
+            Calculates parlay odds in Decimal format.
+        convert_odds(odds, style='a') -> Union[int, float, Fraction, None]:
+            Generic converter to desired style.
     """
-    if isinstance(odds, int):
-        return odds
 
-    elif isinstance(odds, float):
-        if odds > 2.0:
-            return round((odds - 1) * 100, 0)
-        else:
-            return round(-100 / (odds - 1), 0)
+    def american_odds(self, odds: Union[int, float, str]) -> int:
+        """
+        Convert numeric or fractional odds to American format.
 
-    elif "/" in odds:
-        odds = Fraction(odds)
+        Args:
+            odds (int, float, str): Input odds (decimal float, integer, or string like '5/4' or '-150').
 
-        if odds.numerator > odds.denominator:
-            return (odds.numerator / odds.denominator) * 100
-        else:
-            return -100 / (odds.numerator / odds.denominator)
+        Returns:
+            int: Odds in American format.
+        """
+        # Handle string inputs like "-150", "+150", "150"
+        if isinstance(odds, str):
+            # Check if it's a fractional odds string
+            if "/" in odds:
+                odds_frac = Fraction(odds)
+                frac = odds_frac.numerator / odds_frac.denominator
+                return int(frac * 100) if odds_frac.numerator >= odds_frac.denominator else int(-100 / frac)
+            
+            # Handle American odds as strings ("-150", "+150", "150")
+            try:
+                # Remove + sign if present and convert to int
+                if odds.startswith('+'):
+                    return int(odds[1:])
+                elif odds.startswith('-'):
+                    return int(odds)
+                else:
+                    # Assume positive if no sign
+                    return int(odds)
+            except ValueError:
+                raise ValueError(f"Unsupported odds format: {odds}")
 
+        elif isinstance(odds, int):
+            return odds
 
-def decimal_odds(odds):
-    """
-    :param odds: Integer (e.g., -350) or String (e.g., '3/1' or '5/4').
-    :return: Float. Odds expressed in Decimal terms.
-    """
-    if isinstance(odds, float):
-        return odds
-
-    elif isinstance(odds, int):
-        if odds >= 100:
-            return abs(1 + (odds / 100))
-        elif odds <= -101 :
-            return 100 / abs(odds) + 1
-        else:
-            return float(odds)
-
-    elif "/" in odds:
-        odds = Fraction(odds)
-        return round((odds.numerator / odds.denominator) + 1, 2)
-
-
-def fractional_odds(odds):
-    """
-    :param odds: Numeric. (e.g., 2.25 or -350).
-    :return: Fraction Class. Odds expressed in Fractional terms.
-    """
-    if isinstance(odds, str):
-        return Fraction(odds)
-
-    elif isinstance(odds, int):
-        if odds > 0:
-            denom = 100
-            g_cd = gcd(odds, denom)
-            num = int(odds / g_cd)
-            denom = int(denom / g_cd)
-
-            return Fraction(num, denom)
+        elif isinstance(odds, float):
+            if odds > 2.0:
+                return int((odds - 1) * 100)
+            else:
+                return int(-100 / (odds - 1))
 
         else:
-            num = 100
-            g_cd = gcd(num, odds)
-            num = int(num / g_cd)
-            denom = int(odds / g_cd)
+            raise ValueError(f"Unsupported odds format: {odds}")
 
-            return -Fraction(num, denom)
+    def decimal_odds(self, odds: Union[int, float, str]) -> float:
+        """
+        Convert numeric or fractional odds to Decimal format.
 
-    elif isinstance(odds, float):
-        new_odds = int((odds - 1) * 100)
-        g_cd = gcd(new_odds, 100)
-        return Fraction(int(new_odds/g_cd), int(100/g_cd))
+        Args:
+            odds (int, float, str): Input odds (American int, decimal float, fractional string, or American str).
 
+        Returns:
+            float: Odds in Decimal format.
+        """
+        if isinstance(odds, float):
+            return odds
 
-def parlay_odds(odds):
-    """
-    :param odds: List. A list of odds for wagers to be included in parlay
-    :return: Parlay odds in Decimal terms
-    """
-    return np.prod(np.array([decimal_odds(x) for x in odds]))
+        elif isinstance(odds, int):
+            if odds >= 100:
+                return 1 + (odds / 100.0)
+            elif odds <= -101:
+                return 1 + (100.0 / abs(odds))
+            else:
+                return float(odds)
 
+        elif isinstance(odds, str):
+            if "/" in odds:
+                return round(float(Fraction(odds)) + 1, 2)
+            
+            # Handle American odds as strings
+            try:
+                if odds.startswith('+'):
+                    val = int(odds[1:])
+                    return 1 + (val / 100.0)
+                elif odds.startswith('-'):
+                    val = int(odds[1:])
+                    if val < 100:
+                        raise ValueError(f"Invalid negative American odds: {odds} (must be <= -100)")
+                    return 1 + (100.0 / val)
+                else:
+                    # Assume it's a number string
+                    val = int(odds)
+                    if val >= 100:
+                        return 1 + (val / 100.0)
+                    elif val <= -101:
+                        return 1 + (100.0 / abs(val))
+                    else:
+                        return float(val)
+            except ValueError:
+                raise ValueError(f"Unsupported odds format: {odds}")
 
-def convert_odds(odds, odds_style='a'):
-    """
-    :param odds: Stated odds from bookmaker (American, Decimal, or Fractional)
-    :param odds_style: American ('a', 'amer', 'american'), Decimal ('d', dec','decimal) Fractional ('f','frac','fractional)
-    :return: Numeric. Odds converted to selected style.
-    """
-    try:
-        if odds_style.lower() == "american" or odds_style.lower() == 'amer' or odds_style.lower() == 'a':
-            return american_odds(odds)
+        raise ValueError(f"Unsupported odds format: {odds}")
 
-        elif odds_style.lower() == "decimal" or odds_style.lower() == 'dec' or odds_style.lower() == 'd':
-            return decimal_odds(odds)
+    def fractional_odds(self, odds: Union[int, float, str]) -> Fraction:
+        """
+        Convert numeric or fractional odds to Fraction format.
 
-        elif odds_style.lower() == "fractional" or odds_style.lower() == 'frac' or odds_style.lower() == 'f':
-            return fractional_odds(odds)
+        Args:
+            odds (int, float, str): Input odds (decimal float, integer, or string like '5/4').
 
-    except (ValueError, KeyError, NameError):
-        return None
+        Returns:
+            Fraction: Odds as a Fraction.
+        """
+        if isinstance(odds, str):
+            return Fraction(odds)
+
+        elif isinstance(odds, int):
+            if odds > 0:
+                g_cd = gcd(odds, 100)
+                return Fraction(odds // g_cd, 100 // g_cd)
+            else:
+                g_cd = gcd(100, abs(odds))
+                return Fraction(-100 // g_cd, abs(odds) // g_cd)
+
+        elif isinstance(odds, float):
+            new_odds = int(round((odds - 1) * 100))
+            g_cd = gcd(abs(new_odds), 100)
+            return Fraction(abs(new_odds) // g_cd, 100 // g_cd) * (1 if new_odds >= 0 else -1)
+
+        else:
+            raise ValueError(f"Unsupported odds format: {odds}")
+
+    def parlay_odds(self, odds_list: list) -> float:
+        """
+        Compute combined parlay odds from a list of odds.
+
+        Args:
+            odds_list (list): List of odds in any format (int, float, str).
+
+        Returns:
+            float: Parlay odds in Decimal format.
+        """
+        return np.prod([self.decimal_odds(x) for x in odds_list])
+
+    def convert_odds(self, odds: Union[int, float, str], style: str = 'a') -> Union[int, float, Fraction, None]:
+        """
+        Convert odds to a specified format (American, Decimal, Fractional).
+
+        Args:
+            odds (int, float, str, list): Input odds or list of odds.
+            style (str): Target format: 'a'/'american', 'd'/'decimal', 'f'/'fractional'.
+
+        Returns:
+            Union[int, float, Fraction, None]: Converted odds or None if invalid.
+        """
+        try:
+            style_lower = style.lower()
+            if style_lower in ['a', 'amer', 'american']:
+                return self.american_odds(odds)
+            elif style_lower in ['d', 'dec', 'decimal']:
+                return self.decimal_odds(odds)
+            elif style_lower in ['f', 'frac', 'fractional']:
+                return self.fractional_odds(odds)
+        except (ValueError, KeyError, NameError):
+            return None
